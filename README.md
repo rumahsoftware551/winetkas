@@ -60,6 +60,8 @@ Seluruh komponen production dijalankan di VPS menggunakan Docker Compose:
 
 Ikuti [`docs/VPS-DEPLOY.md`](docs/VPS-DEPLOY.md). Jangan commit `.env.production`, private key, password, atau secret VPS.
 
+Target production: `https://ispfinance.rumahsoftware.site` pada VPS `157.20.233.22`.
+
 ## Struktur utama
 
 ```text

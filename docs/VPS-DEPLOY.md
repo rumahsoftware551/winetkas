@@ -8,7 +8,37 @@
 - port 22, 80, dan 443 dibuka;
 - domain/subdomain dengan A record mengarah ke IP publik VPS.
 
-## 1. Siapkan direktori
+## Target production
+
+- Domain: `ispfinance.rumahsoftware.site`
+- VPS: `157.20.233.22`
+
+## 1. Siapkan GitHub Environment
+
+Buat GitHub Environment bernama `production`, kemudian tambahkan secrets:
+
+- `VPS_USER`: username SSH yang memiliki akses `sudo` tanpa prompt atau akses Docker;
+- `VPS_PORT`: port SSH, default `22`;
+- `VPS_SSH_KEY`: private key untuk user tersebut;
+- `POSTGRES_PASSWORD`: password URL-safe yang kuat dan tetap;
+- `SEED_ADMIN_PASSWORD`: kata sandi awal akun aplikasi yang kuat.
+
+IP VPS dan domain sudah ditetapkan pada workflow. Jangan memasukkan password atau private key ke source code.
+
+## 2. Deployment otomatis
+
+Setelah PR digabungkan ke `main`, workflow akan:
+
+1. membuat `/opt/ispfinance` dan clone repository bila belum ada;
+2. memasang Docker/Git bila diperlukan;
+3. membuat `.env.production` dengan permission terbatas;
+4. membangun container aplikasi, PostgreSQL, dan Caddy;
+5. menjalankan migration dan seed pada deployment pertama;
+6. memverifikasi `https://ispfinance.rumahsoftware.site/api/health`.
+
+User SSH harus dapat menjalankan `sudo -n` saat bootstrap pertama. Bila user baru ditambahkan ke group Docker, jalankan workflow sekali lagi setelah sesi SSH diperbarui.
+
+## 3. Persiapan manual alternatif
 
 Masuk ke VPS menggunakan SSH, lalu:
 
@@ -21,7 +51,7 @@ cd /opt/ispfinance
 
 Untuk repository private, gunakan deploy key/read-only token GitHub yang disimpan di VPS, bukan password akun.
 
-## 2. Buat konfigurasi production
+## 4. Buat konfigurasi production manual
 
 ```bash
 cp .env.production.example .env.production
@@ -31,7 +61,7 @@ chmod 600 .env.production
 
 Wajib ubah `DOMAIN`, `APP_URL`, `POSTGRES_PASSWORD`, `DATABASE_URL`, dan `SEED_ADMIN_PASSWORD`. Password database dalam `DATABASE_URL` harus sama dengan `POSTGRES_PASSWORD` dan karakter khusus harus di-URL-encode.
 
-## 3. Deployment pertama
+## 5. Deployment pertama secara manual
 
 ```bash
 docker compose build --pull
@@ -44,21 +74,14 @@ curl -fsS "https://DOMAIN_ANDA/api/health"
 
 Setelah login berhasil, ganti akun/password development sebelum memasukkan data produksi.
 
-## 4. Deployment berikutnya
+## 6. Deployment berikutnya
 
 ```bash
 cd /opt/ispfinance
 sh scripts/deploy.sh
 ```
 
-Atau isi GitHub Environment `production` dengan secrets:
-
-- `VPS_HOST`
-- `VPS_PORT`
-- `VPS_USER`
-- `VPS_SSH_KEY`
-
-Workflow `.github/workflows/deploy-vps.yml` kemudian menjalankan deployment ketika perubahan masuk ke `main`.
+Workflow `.github/workflows/deploy-vps.yml` otomatis berjalan ketika perubahan masuk ke `main` dan juga dapat dijalankan manual.
 
 ## Backup PostgreSQL
 

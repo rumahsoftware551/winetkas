@@ -13,15 +13,57 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      DOMAIN: ispfinance.rumahsoftware.site
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
     steps:
       - name: Deploy melalui SSH
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host: 157.20.233.22
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          envs: DOMAIN,POSTGRES_PASSWORD,SEED_ADMIN_PASSWORD
           script_stop: true
           script: |
+            if ! command -v git >/dev/null 2>&1; then
+              if [ "$(id -u)" = "0" ]; then
+                apt-get update && apt-get install -y git ca-certificates
+              else
+                sudo -n apt-get update && sudo -n apt-get install -y git ca-certificates
+              fi
+            fi
+            if [ ! -d /opt/ispfinance/.git ]; then
+              if [ "$(id -u)" = "0" ]; then
+                mkdir -p /opt/ispfinance
+                chown "$USER":"$USER" /opt/ispfinance
+              else
+                sudo -n mkdir -p /opt/ispfinance
+                sudo -n chown "$USER":"$USER" /opt/ispfinance
+              fi
+              git clone https://github.com/rumahsoftware551/winetkas.git /opt/ispfinance
+            fi
             cd /opt/ispfinance
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            FIRST_DEPLOY=0
+            test -f .env.production || FIRST_DEPLOY=1
+            umask 077
+            printf '%s\n' \
+              "DOMAIN=$DOMAIN" \
+              "POSTGRES_DB=ispfinance" \
+              "POSTGRES_USER=ispfinance" \
+              "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+              "DATABASE_URL=postgresql://ispfinance:$POSTGRES_PASSWORD@db:5432/ispfinance?schema=public" \
+              "APP_URL=https://$DOMAIN" \
+              "SESSION_COOKIE_NAME=ispfinance_session" \
+              "SEED_ADMIN_PASSWORD=$SEED_ADMIN_PASSWORD" > .env.production
+            sh scripts/bootstrap-vps.sh
             sh scripts/deploy.sh
+            if [ "$FIRST_DEPLOY" = "1" ]; then
+              docker compose exec -T app npm run db:seed
+            fi
+            curl -fsS "https://$DOMAIN/api/health"
