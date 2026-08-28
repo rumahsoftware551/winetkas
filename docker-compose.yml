@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node server.js"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+    networks: [internal, web]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [web]
+
+networks:
+  internal:
+    internal: true
+  web:
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
